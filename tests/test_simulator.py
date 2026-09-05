@@ -44,7 +44,27 @@ class SimulatorTests(unittest.TestCase):
         self.assertFalse(result.delivered)
         self.assertTrue(any("ttl-expired" in reason for reason in result.drops))
 
+    def test_routes_adapt_after_link_failure(self) -> None:
+        topology = {
+            "A": {"B": 1, "C": 10},
+            "B": {"A": 1, "C": 1},
+            "C": {"A": 10, "B": 1},
+        }
+        for algorithm in ("dijkstra", "lsr", "dvr"):
+            with self.subTest(algorithm=algorithm):
+                network = NetworkSimulator(topology, algorithm)
+                network.converge()
+                self.assertEqual(network.routing_tables()["A"]["C"]["cost"], 2)
+
+                network.set_link("B", "C", None)
+                network.converge()
+
+                self.assertEqual(network.routing_tables()["A"]["C"]["cost"], 10)
+                self.assertEqual(
+                    network.route_message("A", "C", "recuperado").path,
+                    ("A", "C"),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -66,6 +66,53 @@ class NetworkSimulator:
             self.routers[node] = router
         self._control_queue: deque[_QueuedPacket] = deque()
 
+    def set_link(
+        self,
+        source: str,
+        destination: str,
+        cost: float | None,
+        *,
+        bidirectional: bool = True,
+    ) -> None:
+        """Crea, modifica o elimina un enlace y notifica a los routers locales."""
+
+        if source == destination:
+            raise ValueError("No se permiten enlaces de un nodo hacia sí mismo")
+        if source not in self.topology or destination not in self.topology:
+            raise ValueError("Los extremos del enlace deben existir")
+        if cost is not None and cost <= 0:
+            raise ValueError("El costo del enlace debe ser positivo")
+
+        directions = [(source, destination)]
+        if bidirectional:
+            directions.append((destination, source))
+        for origin, neighbor in directions:
+            if cost is None:
+                self.topology[origin].pop(neighbor, None)
+            else:
+                self.topology[origin][neighbor] = float(cost)
+        self._refresh_local_knowledge()
+
+    def remove_node(self, node_id: str) -> None:
+        """Simula la caída de un nodo y de todos sus enlaces."""
+
+        if node_id not in self.topology:
+            raise ValueError(f"El nodo {node_id!r} no existe")
+        del self.topology[node_id]
+        self.routers.pop(node_id)
+        for links in self.topology.values():
+            links.pop(node_id, None)
+        self._refresh_local_knowledge()
+
+    def _refresh_local_knowledge(self) -> None:
+        for node, router in self.routers.items():
+            if self.algorithm == "dijkstra":
+                router.refresh(self.topology)  # type: ignore[attr-defined]
+            elif self.algorithm == "flooding":
+                router.set_neighbors(self.topology[node])  # type: ignore[attr-defined]
+            else:
+                router.update_local_links(self.topology[node])  # type: ignore[attr-defined]
+
     def _enqueue(
         self,
         queue: deque[_QueuedPacket],
@@ -212,4 +259,3 @@ class NetworkSimulator:
                 for destination, route in table.items()
             }
         return output
-
